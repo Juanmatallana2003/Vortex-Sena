@@ -332,7 +332,6 @@ const App: React.FC = () => {
         <div className="hidden md:flex h-full">
             <Sidebar spaces={spaces} invitedSpaces={invitedSpaces} favoriteSpaceIds={favoriteSpaceIds} onUpdateSpace={handleUpdateSpace} onDeleteSpace={handleDeleteSpace} onCreateSpace={handleCreateSpace} onToggleFavorite={handleToggleFavorite} isCollapsed={!isSidebarOpen} />
         </div>
-
         <main className="flex-1 flex flex-col bg-white dark:bg-[#161618] min-w-0 relative overflow-hidden transition-colors duration-200">
             <KanbanBoard columns={filteredColumns} onCardMove={handleMoveCard} onColumnUpdate={handleUpdateColumn} onCardUpdate={handleUpdateCard} onCardDelete={handleDeleteCard} selectedCard={selectedCard} onCardSelect={setSelectedCard} />
             <MobileNav activeTab={activeTab} onTabChange={handleTabChange} />
@@ -340,7 +339,6 @@ const App: React.FC = () => {
             {isNotificationsMobileOpen && <NotificationsMobileOverlay onClose={closeOverlays}/>}
             {isFavoritesMobileOpen && <FavoritesMobileOverlay spaces={spaces} favoriteSpaceIds={favoriteSpaceIds} onClose={closeOverlays} onSelectSpace={() => closeOverlays()} onRemoveFavorite={handleToggleFavorite}/>}
         </main>
-
       </div>
       {isHistoryOpen && <HistoryModal onClose={() => setIsHistoryOpen(false)} history={history} onOpenCard={handleOpenCardFromHistory}/>}
       {isCreateColumnModalOpen && <CreateColumnModal onClose={() => setIsCreateColumnModalOpen(false)} onSave={handleAddColumn}/>}
