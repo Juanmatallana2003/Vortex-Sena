@@ -2,7 +2,7 @@
 
 
 import React, { useEffect, useRef, useState } from 'react';
-import { FilterState, Tag, Column } from '../types';
+import { FilterState, Tag, Column, WorkspaceMember } from '../types';
 import Avatar from './Avatar';
 import TagPill from './TagPill';
 
@@ -11,7 +11,7 @@ interface FilterMenuProps {
   filters: FilterState;
   onFilterChange: (newFilters: FilterState) => void;
   availableTags: Tag[];
-  availableAssignees: string[];
+  availableAssignees: WorkspaceMember[];
   columns: Column[];
   triggerRef?: React.RefObject<HTMLElement | null>;
 }
@@ -61,10 +61,10 @@ const FilterMenu: React.FC<FilterMenuProps> = ({
     onFilterChange({ ...filters, tags: newTags });
   };
 
-  const toggleAssignee = (assignee: string) => {
-    const newAssignees = filters.assignees.includes(assignee)
-      ? filters.assignees.filter((a) => a !== assignee)
-      : [...filters.assignees, assignee];
+  const toggleAssignee = (assigneeId: string) => {
+    const newAssignees = filters.assignees.includes(assigneeId)
+      ? filters.assignees.filter((a) => a !== assigneeId)
+      : [...filters.assignees, assigneeId];
     onFilterChange({ ...filters, assignees: newAssignees });
   };
 
@@ -76,9 +76,14 @@ const FilterMenu: React.FC<FilterMenuProps> = ({
     tag.label.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  const filteredAssignees = availableAssignees.filter((assignee) =>
-    assignee.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredAssignees = availableAssignees.filter((assignee) => {
+    const haystack = [
+      assignee.name || "",
+      assignee.username || "",
+      assignee.email || ""
+    ].join(" ").toLowerCase();
+    return haystack.includes(searchTerm.toLowerCase());
+  });
 
   const clearFilters = () => {
     onFilterChange({
@@ -198,12 +203,12 @@ const FilterMenu: React.FC<FilterMenuProps> = ({
 
         {activeTab === 'people' && (
           <div className="space-y-1">
-              {filteredAssignees.length > 0 ? filteredAssignees.map((assignee, idx) => {
-                const isSelected = filters.assignees.includes(assignee);
+              {filteredAssignees.length > 0 ? filteredAssignees.map((assignee) => {
+                const isSelected = filters.assignees.includes(assignee.id);
                 return (
                   <button
-                    key={idx}
-                    onClick={() => toggleAssignee(assignee)}
+                    key={assignee.id}
+                    onClick={() => toggleAssignee(assignee.id)}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 group border border-transparent",
                       isSelected 
@@ -212,13 +217,13 @@ const FilterMenu: React.FC<FilterMenuProps> = ({
                     )}
                   >
                     <div className={cn("transition-transform duration-200", isSelected ? "scale-105" : "")}>
-                      <Avatar src={assignee} alt="User" />
+                      <Avatar src={assignee.avatarUrl} alt={assignee.name} />
                     </div>
                     <span className={cn(
                       "text-sm transition-colors duration-200",
                       isSelected ? "text-neutral-900 dark:text-neutral-100 font-medium" : "text-neutral-600 dark:text-neutral-400 group-hover:text-neutral-900 dark:group-hover:text-neutral-300"
                     )}>
-                      User {idx + 1}
+                      {assignee.name}
                     </span>
                     {isSelected && (
                       <div className="ml-auto bg-blue-600 dark:bg-blue-500 text-white rounded-full px-1 text-[10px]">

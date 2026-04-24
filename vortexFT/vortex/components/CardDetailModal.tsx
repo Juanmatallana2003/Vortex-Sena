@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Tag } from '../types';
+import { createPortal } from 'react-dom';
+import { Card, Tag, WorkspaceMember } from '../types';
 import Avatar from './Avatar';
 import TagPill from './TagPill';
-import { ALL_TAGS, ALL_USERS } from '../constants';
+import { ALL_TAGS } from '../constants';
 
 // ✨ ¡Inyectamos directo Al Archivo Oficial la Central Api aquí!! 
 import { vortexApi } from '@/api';
@@ -12,16 +13,20 @@ import { vortexApi } from '@/api';
 
 interface CardDetailModalProps {
   card: Card;
+  workspaceMembers?: WorkspaceMember[];
+  onOpenMembers?: () => void;
   onClose: () => void;
   onUpdate: (updatedCard: Card) => void;
   onDelete: (cardId: string) => void;
 }
 
-const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpdate, onDelete }) => {
+const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, workspaceMembers = [], onOpenMembers, onClose, onUpdate, onDelete }) => {
 
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description || '');
-  const [assignees, setAssignees] = useState<string[]>(card.assignees ||[]);
+  const [assignees, setAssignees] = useState<string[]>(
+    (card.assignees || []).filter((assigneeId) => workspaceMembers.some((member) => member.id === assigneeId))
+  );
   const [tags, setTags] = useState<Tag[]>(card.tags || []);
   const[dueDate, setDueDate] = useState(card.dueDate || '');
 
@@ -35,6 +40,12 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
   
   const assigneeRef = useRef<HTMLDivElement>(null);
   const tagRef = useRef<HTMLDivElement>(null);
+  const hasWorkspaceMembers = workspaceMembers.length > 0;
+  const getMemberById = (memberId: string) => workspaceMembers.find((member) => member.id === memberId);
+
+  useEffect(() => {
+      setAssignees((card.assignees || []).filter((assigneeId) => workspaceMembers.some((member) => member.id === assigneeId)));
+  }, [card.assignees, workspaceMembers]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -45,6 +56,7 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
   },[]);
+
 
   const handleModalContentClick = (e: React.MouseEvent) => { e.stopPropagation(); };
 
@@ -80,12 +92,12 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
 
 
   // Toggle helpers
-  const toggleAssignee = (avatarUrl: string) => { setAssignees(prev => prev.includes(avatarUrl) ? prev.filter(a => a !== avatarUrl) : [...prev, avatarUrl] ); };
+  const toggleAssignee = (memberId: string) => { setAssignees(prev => prev.includes(memberId) ? prev.filter(a => a !== memberId) : [...prev, memberId] ); };
   const toggleTag = (tag: Tag) => { setTags(prev => { const exists = prev.some(t => t.label === tag.label); if (exists) return prev.filter(t => t.label !== tag.label); return [...prev, tag]; }); };
 
-  return (
-    <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="card-title">
-      <div className="bg-white dark:bg-[#1c1c1f] border border-neutral-200 dark:border-neutral-800 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-scale-in shadow-2xl relative" onClick={handleModalContentClick}>
+  const modalContent = (
+    <div className="fixed inset-0 bg-black/70 z-[1200] flex items-center justify-center p-3 md:p-4 animate-fade-in backdrop-blur-sm overflow-y-auto" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="card-title">
+      <div className="bg-white dark:bg-[#1c1c1f] border border-neutral-200 dark:border-neutral-800 rounded-xl w-full max-w-[1100px] max-h-[92vh] flex flex-col animate-scale-in shadow-2xl relative mx-auto my-2" onClick={handleModalContentClick}>
         
         {/* Tira Banner De confirmaciones Mágico */}
         { showStatusPushAlert.active && (
@@ -111,9 +123,9 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
           </div>
         </header>
 
-        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
             {/* Left Box Editor Titles / Text Areas !! */}
-            <div className="flex-1 p-6 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800">
+            <div className="flex-1 min-h-0 p-6 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800">
                 <div className="space-y-6">
                     <div>
                         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-transparent text-xl font-semibold text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 border-none outline-none focus:ring-0 p-0" placeholder="Escribele Modificado su Name" />
@@ -123,7 +135,7 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
                          <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2"> Desglose Documento</label>
                         <textarea
                             value={description} onChange={(e) => setDescription(e.target.value)}
-                            className="w-full h-[55%] min-h-[30vh] bg-gray-50 dark:bg-[#161618] border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 dark:focus:ring-blue-900/20 transition-all resize-none leading-relaxed placeholder:text-neutral-400 dark:placeholder:text-neutral-600"
+                            className="w-full h-56 md:h-[42vh] min-h-[180px] bg-gray-50 dark:bg-[#161618] border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 text-neutral-700 dark:text-neutral-300 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 dark:focus:ring-blue-900/20 transition-all resize-none leading-relaxed placeholder:text-neutral-400 dark:placeholder:text-neutral-600"
                             placeholder="Anéxate acá su requerimientos / Report Code bugs log ..."
                         />
                     </div>
@@ -131,27 +143,91 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
             </div>
 
             {/* Menu SIDE Bar Rights Labels e Iconografias  !!*/}
-            <div className="w-full md:w-80 bg-gray-50/50 dark:bg-[#161618]/50 p-6 overflow-y-auto space-y-8 flex-shrink-0">
+            <div className="w-full md:w-80 min-h-0 bg-gray-50/50 dark:bg-[#161618]/50 p-6 overflow-y-auto space-y-8 flex-shrink-0">
                 <div className="relative" ref={assigneeRef}>
                     <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Participan Developer</label>
-                        <button onClick={() => setIsAssigneeOpen(!isAssigneeOpen)} className="text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"><i className="fa-solid fa-gear"></i></button>
+                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Personas Asignadas</label>
+                        <button
+                          onClick={() => setIsAssigneeOpen(!isAssigneeOpen)}
+                          className="text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          title="Asignar miembros del espacio"
+                        >
+                          <i className="fa-solid fa-gear"></i>
+                        </button>
                     </div>
                     
                     <div className="flex flex-wrap gap-2 min-h-[32px]">
-                        {assignees.map((assignee, index) => (
-                             <div key={index} className="relative group">
-                                <Avatar src={assignee} alt="Assignee" />
-                                <button onClick={() => toggleAssignee(assignee)} className="absolute -top-2 -right-2 w-5 h-5 bg-white dark:bg-neutral-800 rounded-full text-xs text-neutral-400 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400 hover:scale-125 transition-all border border-neutral-200 dark:border-neutral-600 shadow-sm"><i className="fa-solid fa-times"></i></button>
+                        {assignees.map((assigneeId, index) => {
+                          const member = getMemberById(assigneeId);
+                          if (!member) return null;
+                          return (
+                             <div key={`${assigneeId}-${index}`} className="relative group flex items-center gap-2 bg-white dark:bg-[#111113] border border-neutral-200 dark:border-neutral-700 rounded-full pr-2">
+                                <Avatar src={member.avatarUrl} alt={member.name} />
+                                <span className="text-xs text-neutral-700 dark:text-neutral-300 max-w-[90px] truncate">{member.name}</span>
+                                <button onClick={() => toggleAssignee(assigneeId)} className="w-4 h-4 bg-white dark:bg-neutral-800 rounded-full text-[9px] text-neutral-400 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400 transition-all border border-neutral-200 dark:border-neutral-600 shadow-sm"><i className="fa-solid fa-times"></i></button>
                              </div>
-                        ))}
-                        {assignees.length === 0 && <span className="text-sm text-neutral-500 dark:text-neutral-600 italic">Dev Pendiente N/A</span>}
+                          );
+                        })}
+                        {assignees.length === 0 && <span className="text-sm text-neutral-500 dark:text-neutral-600 italic">Sin personas asignadas</span>}
                     </div>
-                    {isAssigneeOpen && (
-                        <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#1c1c1f] border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl z-20 animate-scale-in overflow-hidden">
-                            <div className="p-2 border-b border-neutral-200 dark:border-neutral-800 text-xs font-medium text-neutral-500 dark:text-neutral-400">Puestos / Cargos Dev</div>
-                            <div className="max-h-48 overflow-y-auto p-1">
-                                {ALL_USERS.map((user) => { const isSelected = assignees.includes(user.avatar); return (<button key={user.name} onClick={() => toggleAssignee(user.avatar)} className="flex items-center gap-2 w-full p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-md transition-colors text-left"><Avatar src={user.avatar} alt={user.name} /><span className={`text-sm flex-1 ${isSelected ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-neutral-700 dark:text-neutral-300'}`}>{user.name}</span>{isSelected && <i className="fa-solid fa-check text-blue-600 dark:text-blue-400 text-xs"></i>}</button>);})}
+
+                    {!hasWorkspaceMembers && (
+                      <div className="mt-3 rounded-xl border border-amber-300/80 dark:border-amber-500/40 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:from-amber-900/20 dark:via-orange-900/10 dark:to-rose-900/10 p-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center flex-shrink-0">
+                            <i className="fa-solid fa-triangle-exclamation text-xs"></i>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Aun no tienes miembros en este espacio</p>
+                            <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300/90">
+                              Para asignar tareas a personas reales, primero agrega o invita miembros en <span className="font-semibold">View Members</span>.
+                            </p>
+                            <p className="text-[10px] uppercase tracking-wide text-amber-700/80 dark:text-amber-300/70">
+                              Ruta rapida: menu del espacio, luego View Members y despues Invitar
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onOpenMembers) onOpenMembers();
+                                onClose();
+                              }}
+                              className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-400/70 dark:border-amber-400/50 bg-amber-100/70 dark:bg-amber-500/10 hover:bg-amber-200/80 dark:hover:bg-amber-500/20 text-[11px] font-semibold text-amber-800 dark:text-amber-200 transition-colors"
+                            >
+                              <i className="fa-solid fa-user-plus text-[10px]"></i>
+                              Ir a View Members
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {isAssigneeOpen && hasWorkspaceMembers && (
+                        <div className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-[#1c1c1f] border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl z-20 animate-scale-in overflow-hidden">
+                            <div className="p-2 border-b border-neutral-200 dark:border-neutral-800 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                              Miembros Reales del Espacio ({workspaceMembers.length})
+                            </div>
+                            <div className="max-h-56 overflow-y-auto p-1">
+                                {workspaceMembers.map((member) => {
+                                  const isSelected = assignees.includes(member.id);
+                                  return (
+                                    <button
+                                      key={member.id}
+                                      onClick={() => toggleAssignee(member.id)}
+                                      className="flex items-center gap-2 w-full p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-md transition-colors text-left"
+                                    >
+                                      <Avatar src={member.avatarUrl} alt={member.name} />
+                                      <div className="flex-1 min-w-0">
+                                        <span className={`text-sm block truncate ${isSelected ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-neutral-700 dark:text-neutral-300'}`}>
+                                          {member.name}
+                                        </span>
+                                        <span className="text-[10px] text-neutral-500 dark:text-neutral-500 truncate block">
+                                          {member.username || member.email || "Miembro del espacio"}
+                                        </span>
+                                      </div>
+                                      {isSelected && <i className="fa-solid fa-check text-blue-600 dark:text-blue-400 text-xs"></i>}
+                                    </button>
+                                  );
+                                })}
                             </div>
                         </div>
                     )}
@@ -215,6 +291,13 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(modalContent, document.body);
 };
 
 export default CardDetailModal;
+

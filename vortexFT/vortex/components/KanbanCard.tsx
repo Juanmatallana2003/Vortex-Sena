@@ -2,13 +2,16 @@
 
 
 import React, { useState } from 'react';
-import { Card } from '../types';
+import { Card, WorkspaceMember } from '../types';
 import Avatar from './Avatar';
 import TagPill from './TagPill';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface KanbanCardProps {
   card: Card;
-  status: string;
+  columnId: string;
+  workspaceMembers?: WorkspaceMember[];
   onCardSelect: (card: Card) => void;
 }
 
@@ -20,39 +23,58 @@ const statusHoverBorderConfig: { [key: string]: string } = {
 };
 
 
-const KanbanCard: React.FC<KanbanCardProps> = ({ card, status, onCardSelect }) => {
+const KanbanCard: React.FC<KanbanCardProps> = ({ card, columnId, workspaceMembers = [], onCardSelect }) => {
     const [isDragging, setIsDragging] = useState(false);
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging: sortableDragging } = useSortable({
+      id: `card:${card.id}`,
+      data: {
+        type: 'card',
+        cardId: card.id,
+        columnId
+      }
+    });
+
+    const findMemberById = (memberId: string) => workspaceMembers.find(m => m.id === memberId);
+    const assigneeVisuals = (card.assignees || []).map((assigneeId, index) => {
+      const member = findMemberById(assigneeId);
+      const fallbackIsUrl = assigneeId.startsWith('http://') || assigneeId.startsWith('https://');
+      return {
+        key: `${assigneeId}-${index}`,
+        src: member?.avatarUrl || (fallbackIsUrl ? assigneeId : "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"),
+        alt: member?.name || `Assignee ${index + 1}`
+      };
+    });
 
     // Fallback for dynamic columns if specific color isn't mapped
-    const hoverBorderClass = statusHoverBorderConfig[status] || 'hover:border-neutral-500';
-
-    const handleDragStart = (e: React.DragEvent) => {
-      setIsDragging(true);
-      e.dataTransfer.setData('cardId', card.id);
-      e.dataTransfer.setData('sourceColumnId', status);
-      e.dataTransfer.effectAllowed = 'move';
-    };
-
-    const handleDragEnd = () => {
-      setIsDragging(false);
-    };
+    const hoverBorderClass = statusHoverBorderConfig[columnId] || 'hover:border-neutral-500';
+    const dragActive = isDragging || sortableDragging;
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      zIndex: sortableDragging ? 60 : undefined
+    } as React.CSSProperties;
 
   return (
     <div 
-        draggable
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        data-dnd-card="true"
+        onPointerDown={() => setIsDragging(true)}
+        onPointerUp={() => setIsDragging(false)}
+        onPointerCancel={() => setIsDragging(false)}
         onClick={() => onCardSelect(card)}
-        className={`bg-white dark:bg-[#28282b] border border-neutral-200 dark:border-neutral-800 rounded-lg p-3 ${hoverBorderClass} cursor-grab active:cursor-grabbing transition-all duration-200 shadow-sm ${isDragging ? 'opacity-40 scale-95' : 'opacity-100 scale-100'}`}
+        className={`bg-white dark:bg-[#28282b] border border-neutral-200 dark:border-neutral-800 rounded-lg p-3 ${hoverBorderClass} cursor-grab active:cursor-grabbing transition-all duration-200 shadow-sm ${dragActive ? 'opacity-40 scale-95' : 'opacity-100 scale-100'}`}
     >
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center gap-2">
           <span className="text-neutral-500 dark:text-neutral-500 font-mono">#{card.number}</span>
         </div>
-        {card.assignees && (
+        {assigneeVisuals.length > 0 && (
           <div className="flex -space-x-2">
-            {card.assignees.map((assignee, index) => (
-              <Avatar key={index} src={assignee} alt={`Assignee ${index + 1}`} />
+            {assigneeVisuals.map((assignee) => (
+              <Avatar key={assignee.key} src={assignee.src} alt={assignee.alt} />
             ))}
           </div>
         )}

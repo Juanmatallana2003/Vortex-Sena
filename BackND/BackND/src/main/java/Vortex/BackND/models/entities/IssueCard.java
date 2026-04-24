@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,6 +36,15 @@ public class IssueCard {
     @Column(name = "due_date")
     private String dueDate; // Guardaremos la fecha en formato YYYY-MM-DD
 
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @Column(name = "position_index")
+    private Integer position = 0;
+
     // Lista de avatares/nombres de los asignados guardada como un arreglo simple en BD
     @ElementCollection
     @CollectionTable(name = "issue_assignees", joinColumns = @JoinColumn(name = "card_id"))
@@ -55,4 +65,16 @@ public class IssueCard {
     @JoinColumn(name = "column_id", nullable = false)
     @JsonIgnore
     private BoardColumn column;
+
+    @PrePersist
+    protected void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

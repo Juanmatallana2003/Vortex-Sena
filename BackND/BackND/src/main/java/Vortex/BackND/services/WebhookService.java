@@ -13,10 +13,14 @@ public class WebhookService {
 
     private final IssueCardRepository cardRepository;
     private final BoardColumnRepository columnRepository;
+    private final IssueCardService issueCardService;
 
-    public WebhookService(IssueCardRepository cardRepository, BoardColumnRepository columnRepository) {
+    public WebhookService(IssueCardRepository cardRepository,
+                          BoardColumnRepository columnRepository,
+                          IssueCardService issueCardService) {
         this.cardRepository = cardRepository;
         this.columnRepository = columnRepository;
+        this.issueCardService = issueCardService;
     }
 
     public void processCommitMessage(String commitMessage) {
@@ -40,8 +44,7 @@ public class WebhookService {
 
                 System.out.println("Moviendo Tarea '" + tarjetaAMover.getTitle() + "' a la Columna '" + nuevaColumna.getTitle() + "'");
                 
-                tarjetaAMover.setColumn(nuevaColumna);
-                cardRepository.save(tarjetaAMover);
+                issueCardService.moveCardManually(tarjetaAMover.getId(), nuevaColumna.getId(), null);
             } else {
                 System.out.println(" Se detectó el patrón pero el Issue #" + issueId + " o el Trigger no existen en DB.");
             }

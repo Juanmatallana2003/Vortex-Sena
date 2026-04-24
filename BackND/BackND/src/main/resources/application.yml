@@ -21,11 +21,11 @@ spring:
       client:
         registration:
           github:
-            client-id: TU_GITHUB_CLIENT_ID
-            client-secret: TU_GITHUB_CLIENT_SECRET
+            client-id:
+            client-secret:
 
 server:
   port: 8080
 
 github:
-  token: TU_GITHUB_PERSONAL_ACCESS_TOKEN
+  token:

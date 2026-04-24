@@ -26,6 +26,13 @@ public class BoardColumnService {
                 .orElseThrow(() -> new RuntimeException("No se encontró el Workspace con ese ID"));
 
         newColumn.setWorkspace(workspace);
+
+        // Si el frontend no define posicion, la ubicamos al final de las columnas del workspace.
+        if (newColumn.getPosition() == null || newColumn.getPosition() < 0) {
+            Integer maxPosition = columnRepository.findMaxPositionByWorkspaceId(workspaceId);
+            newColumn.setPosition((maxPosition == null ? -1 : maxPosition) + 1);
+        }
+
         return columnRepository.save(newColumn);
     }
 }

@@ -33,7 +33,7 @@ public class Workspace {
     // 1 Espacio de Trabajo puede tener MUCHAS columnas (Lista)
     // El "cascade" hace que si borramos un workspace, se borren también sus columnas de forma segura.
     @OneToMany(mappedBy = "workspace", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("id ASC") // ORDEN FIJO GARANTIZADO: Organiza siempre las columnas por su ID de creación en PostgreSQL.
+    @OrderBy("position ASC, id ASC") // Orden visual estable de izquierda a derecha segun posicion.
     private java.util.List<BoardColumn> columns;
 
     // 1 Espacio puede tener MUCHOS miembros

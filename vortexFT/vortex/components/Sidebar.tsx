@@ -19,15 +19,17 @@ interface NavItemProps {
   isActive?: boolean;
   subText?: string;
   isCollapsed?: boolean;
+  badgeCount?: number;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, text, hasDropdown, isOpen, onClick, onContextMenu, onSettingsClick, level = 0, isActive, subText, isCollapsed }) => {
+const NavItem: React.FC<NavItemProps> = ({ icon, text, hasDropdown, isOpen, onClick, onContextMenu, onSettingsClick, level = 0, isActive, subText, isCollapsed, badgeCount }) => {
     const paddingClasses: { [key: number]: string } = {
         0: 'pl-1 pr-4',
         1: 'pl-6 pr-4',
         2: 'pl-10 pr-4',
     };
     const paddingClass = paddingClasses[level] || paddingClasses[0];
+    const resolvedIcon = icon && icon.trim().length > 0 ? icon : 'fa-regular fa-folder';
 
     return (
         <a
@@ -40,7 +42,7 @@ const NavItem: React.FC<NavItemProps> = ({ icon, text, hasDropdown, isOpen, onCl
         className={`flex items-center py-2 text-neutral-700 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-700/50 rounded-md ${paddingClass} ${isActive ? 'bg-gray-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 font-bold border-l-[3px] border-l-[#3679da]' : 'border-l-[3px] border-l-transparent'} transition-colors duration-200 group h-9`}
         title={isCollapsed ? text : undefined}
         >
-        <i className={`w-6 text-center text-neutral-500 dark:text-neutral-400 ${icon} ${level === 2 ? 'text-[10px] text-purple-400' : 'text-base'} flex-shrink-0 transition-colors duration-200`}></i>
+        <i className={`w-6 text-center text-neutral-500 dark:text-neutral-400 ${resolvedIcon} ${level === 2 ? 'text-[10px] text-purple-400' : 'text-base'} flex-shrink-0 transition-colors duration-200`}></i>
         
         <div className={`flex flex-col ml-3 overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out ${isCollapsed ? 'max-w-0 opacity-0' : 'max-w-[150px] opacity-100'}`}>
             <span className={`truncate ${level === 2 ? 'text-xs font-semibold text-neutral-600 dark:text-[#aeb9cb] mb-[2px] ' : 'text-[13.5px]'}`}>{text}</span>
@@ -48,6 +50,11 @@ const NavItem: React.FC<NavItemProps> = ({ icon, text, hasDropdown, isOpen, onCl
         </div>
         
         <div className={`ml-auto flex items-center gap-1 transition-all duration-300 ${isCollapsed ? 'max-w-0 opacity-0' : 'opacity-100'}`}>
+            {typeof badgeCount === 'number' && badgeCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] rounded-full border border-sky-500/45 bg-sky-500/15 px-1.5 text-[10px] font-bold text-sky-200">
+                    {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+            )}
             {onSettingsClick && (
                 <div 
                     role="button"
@@ -83,7 +90,11 @@ interface SidebarProps {
   currentUserLoggedHeaderStringName?: string;
   activeWorkspaceSelectionIDIdFromFrontToNav?: string; 
   onSpecificSelectorBoardActionSetterTriggeredFromSideBavUI?: (clickedActiveSpecificTabFromListNav :string)=> void; 
-  onMemberAdded?: (updatedSpace: Space) => void; // El puente de conexión corregido
+  onMemberAdded?: (updatedSpace: Space) => void; // El puente de conexion corregido
+  membersModalRequest?: { workspaceId: string; nonce: number } | null;
+  unreadNotificationsCount?: number;
+  onOpenNotifications?: () => void;
+  isNotificationsOpen?: boolean;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -98,7 +109,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   currentUserLoggedHeaderStringName="Not Linked Env", 
   activeWorkspaceSelectionIDIdFromFrontToNav,
   onSpecificSelectorBoardActionSetterTriggeredFromSideBavUI,
-  onMemberAdded
+  onMemberAdded,
+  membersModalRequest,
+  unreadNotificationsCount = 0,
+  onOpenNotifications,
+  isNotificationsOpen = false
 }) => {
 
   const[isProjectsOpen, setIsProjectsOpen] = useState(true);
@@ -137,6 +152,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   const closeContextMenu = () => setContextMenu(prev => ({ ...prev, visible: false, space: null }));
   useEffect(() => { const handleClickOutside = (event: MouseEvent) => { if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) { setIsProfileMenuOpen(false); } }; if (isProfileMenuOpen) document.addEventListener('mousedown', handleClickOutside); return () => { document.removeEventListener('mousedown', handleClickOutside); }; }, [isProfileMenuOpen]);
   useEffect(() => { const handleGlobalClick = () => { if (contextMenu.visible) { closeContextMenu(); } }; if (contextMenu.visible) { document.addEventListener('click', handleGlobalClick); } return () => { document.removeEventListener('click', handleGlobalClick); }; },[contextMenu.visible]);
+  useEffect(() => {
+    if (!membersModalRequest?.workspaceId) return;
+    const targetSpace = spaces.find(space => space.id === membersModalRequest.workspaceId);
+    if (targetSpace) {
+      setViewingMembersSpace(targetSpace);
+    }
+  }, [membersModalRequest?.workspaceId, membersModalRequest?.nonce, spaces]);
 
   const getRepoName = (url?: string) => {
     if (!url) return '';
@@ -145,6 +167,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const favoriteSpacesList = spaces.filter(s => favoriteSpaceIds.has(s.id));
+  const uniformFavoriteIcon = "fa-regular fa-folder";
 
   return (
     <>
@@ -152,7 +175,15 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto scrollbar-hide mr-[-3px]">
           <nav className="flex flex-col gap-1 px-2 pt-2 pb-2 pr-[2px]">
             
-            <NavItem icon="fa-regular fa-bell" text="Notifications" isCollapsed={isCollapsed} />
+            <NavItem
+              icon="fa-regular fa-bell"
+              text="Notifications"
+              hasDropdown
+              isOpen={isNotificationsOpen}
+              badgeCount={unreadNotificationsCount}
+              isCollapsed={isCollapsed}
+              onClick={onOpenNotifications}
+            />
             <NavItem icon="fa-brands fa-dropbox" text="Projects" hasDropdown isOpen={isProjectsOpen} onClick={() => setIsProjectsOpen(!isProjectsOpen)} isCollapsed={isCollapsed}  />
             
             {isProjectsOpen && (
@@ -199,7 +230,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {isInvitedOpen && (<div className="flex flex-col mb-2">{invitedSpaces.length > 0 ? ( invitedSpaces.map(space => (<NavItem key={space.id} icon={space.icon} text={space.name} level={isCollapsed ? 0 : 1} isCollapsed={isCollapsed} /> ))) : ( !isCollapsed && ( <div className="px-5 py-4 mt-2 mb-2 bg-[#0e0e10] border border-[#2a2a2e] rounded-xl text-[11px] opacity-[0.7] text-neutral-500"> Shared task Empty   <div className="mt-[2px] opacity-[0.4] text-center" >No requests</div> </div> )  )} </div>)}
 
             <NavItem icon="fa-regular fa-star" text="Favorites" hasDropdown isOpen={isFavoritesOpen} onClick={() => setIsFavoritesOpen(!isFavoritesOpen)} isCollapsed={isCollapsed} />
-            {isFavoritesOpen && (<div className="flex flex-col mb-2 mt-1">{favoriteSpaceIds.size > 0 ? ( favoriteSpacesList.map(space => (<NavItem key={`fav-${space.id}`} icon={space.icon} text={space.name} level={isCollapsed ? 0 : 1} onContextMenu={(e) => handleContextMenu(e, space)} onSettingsClick={(e) => handleContextMenu(e, space)} isCollapsed={isCollapsed} />)) ) : ( !isCollapsed && (<div className="px-5 py-3 text-[10px] text-center mt-2 border border-[#333]/30 bg-[#0e0e11] text-neutral-600/70 italic"> No invited spaces </div>))}</div> )}
+            {isFavoritesOpen && (<div className="flex flex-col mb-2 mt-1">{favoriteSpaceIds.size > 0 ? ( favoriteSpacesList.map(space => (<NavItem key={`fav-${space.id}`} icon={uniformFavoriteIcon} text={space.name} level={isCollapsed ? 0 : 1} isActive={activeWorkspaceSelectionIDIdFromFrontToNav ? activeWorkspaceSelectionIDIdFromFrontToNav === space.id : false} onClick={() => onSpecificSelectorBoardActionSetterTriggeredFromSideBavUI && onSpecificSelectorBoardActionSetterTriggeredFromSideBavUI(space.id)} onContextMenu={(e) => handleContextMenu(e, space)} onSettingsClick={(e) => handleContextMenu(e, space)} isCollapsed={isCollapsed} />)) ) : ( !isCollapsed && (<div className="px-5 py-3 text-[10px] text-center mt-2 border border-[#333]/30 bg-[#0e0e11] text-neutral-600/70 italic"> No invited spaces </div>))}</div> )}
           </nav>
         </div>
 
@@ -224,7 +255,10 @@ const Sidebar: React.FC<SidebarProps> = ({
          <MembersModal 
              space={viewingMembersSpace} 
              onClose={() => setViewingMembersSpace(null)} 
-             onMemberAdded={onMemberAdded || onUpdateSpace} // Si no pasan la función, usamos updateSpace como respaldo
+             onMemberAdded={(updatedSpace) => {
+                 setViewingMembersSpace(updatedSpace);
+                 (onMemberAdded || onUpdateSpace)(updatedSpace);
+             }} // Si no pasan la funcion, usamos updateSpace como respaldo
          />
       )}
       

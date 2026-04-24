@@ -8,6 +8,7 @@ interface EditColumnModalProps {
   column: Column;
   onClose: () => void;
   onSave: (updatedColumn: Column) => void;
+  onDelete: (columnId: string) => Promise<void>;
 }
 
 const COLORS = [
@@ -21,11 +22,14 @@ const COLORS = [
   { label: 'Pink', value: 'bg-pink-400' },
 ];
 
-const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSave }) => {
+const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSave, onDelete }) => {
   const [title, setTitle] = useState(column.title);
   const [keyword, setKeyword] = useState(column.keyword);
   const [selectedColor, setSelectedColor] = useState(column.color);
   const [isDoneColumn, setIsDoneColumn] = useState(column.isDoneColumn || false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const handleSave = () => {
     if (title.trim()) {
@@ -42,6 +46,21 @@ const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSa
 
   const handleModalContentClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+  };
+
+  const handleDelete = async () => {
+    if (isDeleting) return;
+    setDeleteError("");
+    setIsDeleting(true);
+    try {
+      await onDelete(column.id);
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo eliminar la columna";
+      setDeleteError(message);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -135,8 +154,56 @@ const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSa
             </label>
           </div>
 
+          {/* Danger Zone */}
+          <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800">
+            <div className="rounded-lg border border-red-300/70 dark:border-red-500/40 bg-red-50/70 dark:bg-red-900/10 p-3">
+              <div className="flex items-start gap-2">
+                <i className="fa-solid fa-triangle-exclamation text-red-500 mt-0.5"></i>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-300">Zona de peligro</p>
+                  <p className="text-[11px] text-red-700/90 dark:text-red-300/90 leading-relaxed">
+                    Si eliminas esta columna, también se eliminarán las tarjetas que contiene.
+                  </p>
+                </div>
+              </div>
+              {!isConfirmingDelete ? (
+                <button
+                  onClick={() => setIsConfirmingDelete(true)}
+                  className="mt-3 w-full sm:w-auto px-3 py-2 rounded-md border border-red-400/70 dark:border-red-500/60 text-red-700 dark:text-red-300 hover:bg-red-100/80 dark:hover:bg-red-500/15 transition-colors text-sm font-semibold"
+                >
+                  Eliminar columna
+                </button>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <p className="text-[11px] text-red-700/90 dark:text-red-300/90">
+                    ¿Confirmas que deseas eliminar <span className="font-bold">{column.title}</span>?
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={() => { setIsConfirmingDelete(false); setDeleteError(""); }}
+                      disabled={isDeleting}
+                      className="px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors text-sm"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="px-3 py-2 rounded-md bg-red-600 border border-red-500 hover:bg-red-700 text-white disabled:opacity-60 disabled:cursor-not-allowed text-sm font-semibold"
+                    >
+                      {isDeleting ? "Eliminando..." : "Sí, eliminar"}
+                    </button>
+                  </div>
+                  {deleteError && (
+                    <p className="text-[11px] text-red-600 dark:text-red-300">{deleteError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Footer Actions */}
-          <div className="flex justify-end gap-3 mt-6">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
             <button
               onClick={onClose}
               className="px-4 py-2 bg-white dark:bg-[#27272a] border border-neutral-300 dark:border-neutral-700 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200"

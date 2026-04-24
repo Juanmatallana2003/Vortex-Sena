@@ -30,12 +30,16 @@ public class BoardColumn {
     @Column(name = "is_done_column")
     private Boolean isDoneColumn;
 
+    @Column(name = "position_index")
+    private Integer position = 0;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "workspace_id", nullable = false) 
     @JsonIgnore 
     private Workspace workspace;
 
     @OneToMany(mappedBy = "column", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("position ASC, id ASC")
     private java.util.List<IssueCard> cards;
     
 }

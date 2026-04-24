@@ -4,9 +4,10 @@ import React from 'react';
 interface MobileNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  unreadNotificationsCount?: number;
 }
 
-const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onTabChange }) => {
+const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onTabChange, unreadNotificationsCount = 0 }) => {
   return (
     <nav className="md:hidden flex items-center bg-[#111113] border-t border-neutral-800/50 safe-area-bottom w-full py-2">
       
@@ -18,6 +19,11 @@ const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onTabChange }) => {
           className={`relative w-12 h-12 flex flex-col items-center justify-center transition-colors ${activeTab === 'notifications' ? 'text-blue-400' : 'text-neutral-500'}`}
         >
           <i className="fa-regular fa-bell text-xl"></i>
+          {unreadNotificationsCount > 0 && (
+            <span className="absolute top-1 right-1 inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/20 px-1 text-[10px] font-bold text-sky-200">
+              {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+            </span>
+          )}
           {activeTab === 'notifications' && (
             <div className="absolute bottom-2 w-1 h-1 bg-blue-500 rounded-full"></div>
           )}

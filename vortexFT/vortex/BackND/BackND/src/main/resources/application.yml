@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: vortex-api
+    
+  datasource:
+    url: jdbc:postgresql://aws-1-us-east-1.pooler.supabase.com:6543/postgres?prepareThreshold=0
+    username: postgres.vrxxjnnrsydyiyopiqpy
+    password: vortexkamban26
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: TU_GITHUB_CLIENT_ID
+            client-secret: TU_GITHUB_CLIENT_SECRET
+
+server:
+  port: 8080
+
+github:
+  token: TU_GITHUB_PERSONAL_ACCESS_TOKEN

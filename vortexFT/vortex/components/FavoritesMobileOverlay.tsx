@@ -19,6 +19,7 @@ const FavoritesMobileOverlay: React.FC<FavoritesMobileOverlayProps> = ({
 }) => {
   
   const favoriteSpaces = spaces.filter(s => favoriteSpaceIds.has(s.id));
+  const uniformFavoriteIcon = "fa-regular fa-folder";
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#111113] animate-fade-in flex flex-col md:hidden">
@@ -50,7 +51,7 @@ const FavoritesMobileOverlay: React.FC<FavoritesMobileOverlayProps> = ({
                         onClick={() => onSelectSpace(space)}
                         className="w-12 h-12 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 flex-shrink-0 border border-yellow-500/20"
                     >
-                        <i className={`${space.icon} text-xl`}></i>
+                        <i className={`${uniformFavoriteIcon} text-xl`}></i>
                     </button>
                     
                     {/* Text Area */}
