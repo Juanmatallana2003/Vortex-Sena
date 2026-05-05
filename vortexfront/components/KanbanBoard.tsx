@@ -4,28 +4,32 @@ import React, { useState, useRef } from 'react';
 import KanbanColumn from './KanbanColumn';
 import EditColumnModal from './EditColumnModal';
 import CardDetailModal from './CardDetailModal';
-import { Card, Column } from '../types';
+import { Card, Column, WorkspaceMember } from '../types';
 
 interface KanbanBoardProps {
   columns: Column[];
   onCardMove: (cardId: string, sourceColumnId: string, targetColumnId: string) => void;
   onColumnUpdate: (updatedColumn: Column) => void;
+  onColumnDelete: (columnId: string) => void | Promise<void>;
   onCardUpdate: (updatedCard: Card) => void;
   onCardDelete: (cardId: string) => void;
   selectedCard: Card | null;
   onCardSelect: (card: Card | null) => void;
   onAddCard: (columnId: string, title: string) => void;
+  members?: WorkspaceMember[];
 }
 
 const KanbanBoard: React.FC<KanbanBoardProps> = ({ 
     columns,
     onCardMove,
     onColumnUpdate,
+    onColumnDelete,
     onCardUpdate,
     onCardDelete,
     selectedCard,
     onCardSelect,
-    onAddCard
+    onAddCard,
+    members = []
 }) => {
   const [editingColumn, setEditingColumn] = useState<Column | null>(null);
 
@@ -85,13 +89,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 onEdit={setEditingColumn}
                 onMoveCard={onCardMove}
                 onAddCard={onAddCard} 
+                members={members}
             />
           ))}
         </div>
       </div>
       
-      {editingColumn && <EditColumnModal column={editingColumn} onClose={() => setEditingColumn(null)} onSave={onColumnUpdate} />}
-      {selectedCard && <CardDetailModal card={selectedCard} onClose={() => onCardSelect(null)} onUpdate={handleSaveCard} onDelete={handleDeleteCard} />}
+      {editingColumn && <EditColumnModal column={editingColumn} onClose={() => setEditingColumn(null)} onSave={onColumnUpdate} onDelete={onColumnDelete} />}
+      {selectedCard && <CardDetailModal card={selectedCard} onClose={() => onCardSelect(null)} onUpdate={handleSaveCard} onDelete={handleDeleteCard} members={members} />}
       <style>{`.scrollbar-hide::-webkit-scrollbar {display: none;} .scrollbar-hide {-ms-overflow-style: none; scrollbar-width: none;}`}</style>
     </div>
   );

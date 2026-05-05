@@ -1,7 +1,7 @@
 "use client";
 
 import React, {useEffect, useMemo, useRef, useState} from "react";
-import {AppNotification, Card, ChangeLogEntry, Column, FilterState, Space, Tag} from "@/types";
+import {AppNotification, Card, ChangeLogEntry, Column, FilterState, Space, Tag, WorkspaceMember} from "@/types";
 import FilterMenu from "@/components/FilterMenu";
 import Sidebar from "@/components/Sidebar";
 import KanbanBoard from "@/components/KanbanBoard";
@@ -14,6 +14,7 @@ import CreateColumnModal from "@/components/CreateColumnModal";
 import LoginProtectionOverlay from "@/components/LoginProtectionOverlay"; 
 import { vortexApi } from "@/api";
 import ToastNotification, { ToastType } from "@/components/ToastNotification";
+import { DEFAULT_AVATAR_SRC, handleAvatarError } from "@/components/Avatar";
 
 const INITIAL_HISTORY_LOG: ChangeLogEntry[] =[{ id: '1', type: 'manual', description: 'Started initial development board log.', user: { name: 'Creator', avatar: 'https://i.pravatar.cc/40?u=a' }, timestamp: new Date().toISOString(), details: 'Sistema montado exitosamente en Postgres.', cardId: 'sys-start'}];
 
@@ -142,16 +143,90 @@ export default function App() {
 
     const stream = new EventSource(vortexApi.getEventsStreamUrl(), { withCredentials: true });
     const refreshOnNotificationEvent = () => refreshNotificationsUnreadCount();
+    const refreshWorkspaceState = async (event?: MessageEvent) => {
+      let eventWorkspaceId: string | null = null;
+      let eventEntityId: string | null = null;
+
+      if (event?.data) {
+        try {
+          const payload = JSON.parse(event.data);
+          eventWorkspaceId = payload.workspaceId || null;
+          eventEntityId = payload.entityId || null;
+        } catch (error) {
+          console.error("Error leyendo evento en tiempo real", error);
+        }
+      }
+
+      try {
+        const [workspacesData, favoritesData] = await Promise.all([
+          vortexApi.getWorkspaces(),
+          vortexApi.getFavoriteSpaces()
+        ]);
+
+        setFavoriteSpaceIds(new Set(favoritesData.map((s: Space) => s.id)));
+        setSpaces(workspacesData);
+
+        const activeWorkspaceStillExists = activeWorkspaceSelectedTracker
+          ? workspacesData.some(space => space.id === activeWorkspaceSelectedTracker)
+          : false;
+        const nextActiveWorkspaceId = activeWorkspaceStillExists
+          ? activeWorkspaceSelectedTracker
+          : workspacesData[0]?.id || null;
+
+        if (nextActiveWorkspaceId !== activeWorkspaceSelectedTracker) {
+          setActiveWorkspaceSelectedTracker(nextActiveWorkspaceId);
+        }
+
+        const activeWorkspace = workspacesData.find(space => space.id === nextActiveWorkspaceId);
+        setColumns(activeWorkspace ? normalizeColumnsFromWorkspace(activeWorkspace) : []);
+
+        if (eventEntityId) {
+          setFilters(prev => ({
+            ...prev,
+            statuses: prev.statuses.filter(statusId => statusId !== eventEntityId)
+          }));
+        }
+
+        if (eventWorkspaceId && eventWorkspaceId === nextActiveWorkspaceId) {
+          vortexApi.getWorkspaceHistory(eventWorkspaceId).then(setHistory).catch(() => setHistory([]));
+        }
+      } catch (error) {
+        console.error("Error sincronizando datos en tiempo real", error);
+      }
+    };
+
+    const realtimeEventNames = [
+      'workspace_created',
+      'workspace_updated',
+      'workspace_deleted',
+      'workspace_member_invited',
+      'favorite_toggled',
+      'column_created',
+      'column_updated',
+      'column_deleted',
+      'columns_reordered',
+      'card_created',
+      'card_updated',
+      'card_moved',
+      'card_deleted',
+      'webhook_commit_processed'
+    ];
 
     stream.addEventListener('notification_created', refreshOnNotificationEvent);
     stream.addEventListener('notification_updated', refreshOnNotificationEvent);
+    realtimeEventNames.forEach(eventName => {
+      stream.addEventListener(eventName, refreshWorkspaceState);
+    });
 
     return () => {
       stream.removeEventListener('notification_created', refreshOnNotificationEvent);
       stream.removeEventListener('notification_updated', refreshOnNotificationEvent);
+      realtimeEventNames.forEach(eventName => {
+        stream.removeEventListener(eventName, refreshWorkspaceState);
+      });
       stream.close();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, activeWorkspaceSelectedTracker]);
 
   // ======== ⚡ CARGAMOS LOS FAVORITOS AL INICIO ========
   async function fetchVortexData() {
@@ -356,7 +431,30 @@ export default function App() {
 
   const handleOpenCardFromHistory = (cardId: string) => { let foundCard: Card | undefined; for (const col of columns) { foundCard = col.cards.find(c => c.id === cardId); if (foundCard) break; } if (foundCard) { setSelectedCard(foundCard); setIsHistoryOpen(false); } else { alert('Issue no encontrado.'); } };
   const handleAddCardFunctionVisual = async (cId: string, iTit: string) => { const genIdLocalNumber = Math.floor(Math.random() * 800) + 15; try { const bdR = await vortexApi.createCard(cId, genIdLocalNumber, iTit, "Nueva task manual"); setColumns(prevList => prevList.map(colD => colD.id === cId ? {...colD, cards:[{...bdR, number:bdR.issueNumber||genIdLocalNumber, tags:[]}, ...colD.cards]} : colD)); addToHistory("Visual Input Card.", `Nuevo Creado`, 'manual')} catch(err) { } };
-  const handleUpdateCard = async (updatedCard: Card) => { setColumns(c => c.map(c1 => ({ ...c1, cards: c1.cards.map(c2 => c2.id === updatedCard.id ? updatedCard : c2) }))); try { await vortexApi.updateCardDetails(updatedCard.id, updatedCard.title, updatedCard.description||"", updatedCard.dueDate, updatedCard.assignees, updatedCard.tags); addToHistory(`Card Details Edited`, `El usuario modificó los detalles de la tarea`, 'manual', updatedCard.id); } catch(err) { console.error("Fallo contactando API para update:", err); } };
+  const handleUpdateCard = async (updatedCard: Card) => {
+      const previousColumnsState = columns;
+      setColumns(c => c.map(c1 => ({ ...c1, cards: c1.cards.map(c2 => c2.id === updatedCard.id ? updatedCard : c2) })));
+
+      try {
+          const savedCard = await vortexApi.updateCardDetails(updatedCard.id, updatedCard.title, updatedCard.description||"", updatedCard.dueDate, updatedCard.assignees, updatedCard.tags);
+          const normalizedSavedCard: Card = {
+              ...updatedCard,
+              ...savedCard,
+              number: savedCard.issueNumber || savedCard.number || updatedCard.number,
+              tags: savedCard.tags || [],
+              assignees: savedCard.assignees || [],
+              dueDate: savedCard.dueDate || ''
+          };
+
+          setColumns(c => c.map(c1 => ({ ...c1, cards: c1.cards.map(c2 => c2.id === normalizedSavedCard.id ? normalizedSavedCard : c2) })));
+          addToHistory(`Card Details Edited`, `El usuario modificó los detalles de la tarea`, 'manual', updatedCard.id);
+          showToast("Tarjeta actualizada con exito", "success");
+      } catch(err) {
+          console.error("Fallo contactando API para update:", err);
+          setColumns(previousColumnsState);
+          showToast(err instanceof Error ? err.message : "Error actualizando la tarjeta", "error");
+      }
+  };
   const handleDeleteCard = async (cardId: string) => { let cardTitle = 'Unknown Card'; let cardNumber = 0; for (const col of columns) { const card = col.cards.find(c => c.id === cardId); if (card) { cardTitle = card.title; cardNumber = card.number; break; } } setColumns(c => c.map(c1 => ({ ...c1, cards: c1.cards.filter(c2 => c2.id !== cardId) }))); try { await vortexApi.deleteCard(cardId); } catch (err) {} addToHistory(`Deleted issue #${cardNumber}`, `Deleted card: "${cardTitle}"`, 'manual'); };
 
   const handleMoveCard = async (cardId: string, sourceColumnId: string, targetColumnId: string) => { 
@@ -393,8 +491,46 @@ export default function App() {
       } 
   };
   const handleColumnReorder = async (draggedColumnId: string, targetColumnId: string) => { if (!activeWorkspaceSelectedTracker || draggedColumnId === targetColumnId) return; setColumns(prevColumns => { const newColumns = [...prevColumns]; const draggedIndex = newColumns.findIndex(c => c.id === draggedColumnId); const targetIndex = newColumns.findIndex(c => c.id === targetColumnId); if (draggedIndex === -1 || targetIndex === -1) return prevColumns; const [draggedColumn] = newColumns.splice(draggedIndex, 1); newColumns.splice(targetIndex, 0, draggedColumn); const orderedIds = newColumns.map(col => col.id); vortexApi.reorderColumns(activeWorkspaceSelectedTracker, orderedIds).catch(err => { console.error("Error sincronizando orden:", err); }); return newColumns; }); };
-  const handleAddColumn = async (newColumnData: Omit<Column, 'cards'>) => { const targetWorkspace = activeWorkspaceSelectedTracker || (spaces.length > 0 ? spaces[0].id : null); if (!targetWorkspace) { alert("Atención: Inicie o Genere un Proyecto primero."); return; } try { const resFromBDCloud = await vortexApi.createColumn( targetWorkspace, newColumnData.title.trim(), newColumnData.keyword ? newColumnData.keyword.trim() : newColumnData.title.substring(0,6), newColumnData.color ); const parsedColFromApi: Column = { ...resFromBDCloud, cards:[] }; setColumns(prevAllCols =>[...prevAllCols, parsedColFromApi]); addToHistory(`Board Scaled`, `Columna nueva:[${parsedColFromApi.title}]`, 'automatic'); } catch(e){ console.error("VORTEX SERVER-SYNC ERROR : Falló envío Cloud HTTP", e); } };
-  const handleUpdateColumn = async (updatedColumn: Column) => { setColumns(columns.map(col => col.id === updatedColumn.id ? updatedColumn : col)); try { await vortexApi.updateColumnDataBD(updatedColumn.id, updatedColumn); } catch(err) { console.error("Error de sincronización", err); } };
+  const updateWorkspaceColumnsInMemory = (workspaceId: string, nextColumns: Column[]) => {
+      setSpaces(prevSpaces => prevSpaces.map(space => (
+          space.id === workspaceId ? { ...space, columns: nextColumns } : space
+      )));
+  };
+  const handleAddColumn = async (newColumnData: Omit<Column, 'cards'>) => { const targetWorkspace = activeWorkspaceSelectedTracker || (spaces.length > 0 ? spaces[0].id : null); if (!targetWorkspace) { alert("Atención: Inicie o Genere un Proyecto primero."); return; } try { const resFromBDCloud = await vortexApi.createColumn( targetWorkspace, newColumnData.title.trim(), newColumnData.keyword ? newColumnData.keyword.trim() : newColumnData.title.substring(0,6), newColumnData.color ); const parsedColFromApi: Column = { ...resFromBDCloud, cards:[] }; const nextColumns = [...columns, parsedColFromApi]; setColumns(nextColumns); updateWorkspaceColumnsInMemory(targetWorkspace, nextColumns); addToHistory(`Board Scaled`, `Columna nueva:[${parsedColFromApi.title}]`, 'automatic'); } catch(e){ console.error("VORTEX SERVER-SYNC ERROR : Falló envío Cloud HTTP", e); } };
+  const handleUpdateColumn = async (updatedColumn: Column) => { const previousColumnsState = columns; const nextColumns = columns.map(col => col.id === updatedColumn.id ? { ...updatedColumn, cards: col.cards } : col); setColumns(nextColumns); if (activeWorkspaceSelectedTracker) updateWorkspaceColumnsInMemory(activeWorkspaceSelectedTracker, nextColumns); try { const savedColumn = await vortexApi.updateColumnDataBD(updatedColumn.id, updatedColumn); const normalizedSavedColumn: Column = { ...updatedColumn, ...savedColumn, cards: updatedColumn.cards || [] }; setColumns(prevColumns => { const syncedColumns = prevColumns.map(col => col.id === normalizedSavedColumn.id ? { ...normalizedSavedColumn, cards: col.cards } : col); if (activeWorkspaceSelectedTracker) updateWorkspaceColumnsInMemory(activeWorkspaceSelectedTracker, syncedColumns); return syncedColumns; }); showToast("Columna actualizada en tiempo real", "success"); } catch(err) { console.error("Error de sincronización", err); setColumns(previousColumnsState); if (activeWorkspaceSelectedTracker) updateWorkspaceColumnsInMemory(activeWorkspaceSelectedTracker, previousColumnsState); showToast("Error actualizando la columna", "error"); } };
+  const handleDeleteColumn = async (columnId: string) => {
+      const columnToDelete = columns.find(col => col.id === columnId);
+      if (!columnToDelete) return;
+
+      const previousColumnsState = columns;
+      const nextColumns = columns.filter(col => col.id !== columnId);
+
+      setColumns(nextColumns);
+      if (activeWorkspaceSelectedTracker) {
+          updateWorkspaceColumnsInMemory(activeWorkspaceSelectedTracker, nextColumns);
+      }
+      setFilters(prev => ({
+          ...prev,
+          statuses: prev.statuses.filter(statusId => statusId !== columnId)
+      }));
+      setSelectedCard(currentCard => (
+          currentCard && columnToDelete.cards.some(card => card.id === currentCard.id) ? null : currentCard
+      ));
+
+      try {
+          await vortexApi.deleteColumn(columnId);
+          addToHistory(`Deleted column`, `Columna borrada: "${columnToDelete.title}"`, 'manual');
+          showToast("Columna borrada en tiempo real", "success");
+      } catch(err) {
+          console.error("Error borrando la columna", err);
+          setColumns(previousColumnsState);
+          if (activeWorkspaceSelectedTracker) {
+              updateWorkspaceColumnsInMemory(activeWorkspaceSelectedTracker, previousColumnsState);
+          }
+          showToast(err instanceof Error ? err.message : "Error borrando la columna", "error");
+          throw err;
+      }
+  };
 
   const { availableTags, availableAssignees } = useMemo(() => { const tagsMap = new Map<string, Tag>(); const assigneesSet = new Set<string>(); columns.forEach(col => { col.cards.forEach(card => { card.tags.forEach(tag => tagsMap.set(tag.label, tag)); if (card.assignees) { card.assignees.forEach(a => assigneesSet.add(a)); } }); }); return { availableTags: Array.from(tagsMap.values()), availableAssignees: Array.from(assigneesSet), }; }, [columns]);
   
@@ -426,9 +562,12 @@ export default function App() {
   },[filters, columns, searchQuery]);
 
   const displayCount = filteredColumns.reduce((acc, col) => acc + col.cards.length, 0);
+  const activeWorkspaceMembers: WorkspaceMember[] = useMemo(() => {
+    return spaces.find(space => space.id === activeWorkspaceSelectedTracker)?.members || [];
+  }, [spaces, activeWorkspaceSelectedTracker]);
 
   const userNameDeGithubReal = userProfile?.name || "Vortex User";
-  const userAvatarReal = userProfile?.avatar || "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png";
+  const userAvatarReal = userProfile?.avatar || DEFAULT_AVATAR_SRC;
 
   return (
     <div className="fixed inset-0 h-screen w-screen flex flex-col font-sans text-sm text-neutral-900 dark:text-neutral-200 bg-white dark:bg-[#161618] overflow-hidden transition-colors duration-200">
@@ -443,7 +582,7 @@ export default function App() {
                  <span className="hidden sm:inline text-neutral-500 font-medium hover:underline cursor-pointer tracking-wide">{userNameDeGithubReal}</span>
                  <span className="hidden sm:inline text-neutral-400 dark:text-neutral-600">/</span><b className="text-neutral-900 dark:text-neutral-200 font-semibold truncate hover:underline cursor-pointer">{ activeWorkspaceSelectedTracker ? ( spaces.find(i=>i.id===activeWorkspaceSelectedTracker)?.name ) : "Vortex Kanban"}</b></div></div></div>
               
-              <button className="md:hidden flex-shrink-0 ml-auto mr-2"><img src={isAuthenticated ? userAvatarReal : "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"} alt="Profile" className="w-8 h-8 rounded-full border border-neutral-700 object-cover" /></button>
+              <button className="md:hidden flex-shrink-0 ml-auto mr-2"><img src={isAuthenticated ? userAvatarReal : DEFAULT_AVATAR_SRC} alt="Profile" onError={handleAvatarError} className="w-8 h-8 rounded-full border border-neutral-700 object-cover" /></button>
               
               <div className="flex items-center gap-2.5">
                 <div className="relative group flex-1 md:flex-none">
@@ -470,7 +609,7 @@ export default function App() {
                     </button>
                     <div className="relative ml-2">
                         <button ref={profileButtonRef} onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="shrink-0 group relative overflow-hidden outline-none ring-2 ring-transparent focus:ring-blue-500/50 hover:ring-blue-500/40 rounded-full transition-all cursor-pointer shadow-md">
-                            <img src={userAvatarReal} alt="Admin Profile" className="w-8 h-8 rounded-full border border-neutral-600/80 object-cover object-center scale-[1.03] group-hover:scale-105 duration-200 bg-black/5" />
+                            <img src={userAvatarReal} alt="Admin Profile" onError={handleAvatarError} className="w-8 h-8 rounded-full border border-neutral-600/80 object-cover object-center scale-[1.03] group-hover:scale-105 duration-200 bg-black/5" />
                         </button>
                         {isProfileMenuOpen && <ProfileMenu triggerRef={profileButtonRef} onClose={() => setIsProfileMenuOpen(false)} onSignOut={() => setIsProfileMenuOpen(false)} theme={theme} onToggleTheme={toggleTheme}/>}
                     </div>
@@ -499,7 +638,7 @@ export default function App() {
                 />
             </div>
             <main className="flex-1 flex flex-col h-full bg-[#131315] dark:bg-[#161618] min-w-0 overflow-hidden relative z-[5]">
-                <KanbanBoard columns={filteredColumns} onCardMove={handleMoveCard} onColumnUpdate={handleUpdateColumn} onCardUpdate={handleUpdateCard} onCardDelete={handleDeleteCard} selectedCard={selectedCard} onCardSelect={setSelectedCard} onAddCard={handleAddCardFunctionVisual}/>
+                <KanbanBoard columns={filteredColumns} onCardMove={handleMoveCard} onColumnUpdate={handleUpdateColumn} onColumnDelete={handleDeleteColumn} onCardUpdate={handleUpdateCard} onCardDelete={handleDeleteCard} selectedCard={selectedCard} onCardSelect={setSelectedCard} onAddCard={handleAddCardFunctionVisual} members={activeWorkspaceMembers}/>
                 <MobileNav activeTab={activeTab} onTabChange={handleTabChange} notificationsUnreadCount={notificationsUnreadCount} />{isSpacesMobileOpen && <SpacesMobileOverlay spaces={spaces} onClose={closeOverlays} onSelectSpace={() => closeOverlays()}/>}{isNotificationsMobileOpen && <NotificationsMobileOverlay onClose={closeOverlays} onOpenCard={handleOpenNotificationCard} onNotificationsChanged={refreshNotificationsUnreadCount}/>}{isFavoritesMobileOpen && <FavoritesMobileOverlay spaces={spaces} favoriteSpaceIds={favoriteSpaceIds} onClose={closeOverlays} onSelectSpace={() => closeOverlays()} onRemoveFavorite={handleToggleFavorite}/>}
             </main>
           </div>

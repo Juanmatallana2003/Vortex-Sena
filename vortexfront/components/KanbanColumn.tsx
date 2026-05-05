@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Column, Card } from '../types';
+import { Column, Card, WorkspaceMember } from '../types';
 import KanbanCard from './KanbanCard';
 
 interface KanbanColumnProps {
@@ -9,6 +9,7 @@ interface KanbanColumnProps {
   onCardSelect: (card: Card) => void;
   onEdit: (column: Column) => void;
   onMoveCard: (cardId: string, sourceColumnId: string, targetColumnId: string) => void;
+  members?: WorkspaceMember[];
   onAddCard: (columnId: string, title: string) => void; // El disparador de conexión a API nuevo!
 }
 
@@ -23,7 +24,7 @@ const columnHighlightMap: { [key: string]: { ring: string, bg: string } } = {
   'bg-pink-400': { ring: 'ring-pink-400/50', bg: 'bg-pink-400/5' },
 };
 
-const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onCardSelect, onEdit, onMoveCard, onAddCard }) => {
+const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onCardSelect, onEdit, onMoveCard, onAddCard, members = [] }) => {
   const[isOver, setIsOver] = useState(false);
   const [isAdding, setIsAdding] = useState(false); // Activará tu campo de texto visual
   const [newCardTitle, setNewCardTitle] = useState("");
@@ -111,7 +112,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, onCardSelect, onEdi
         )}
 
         {column.cards.map((card) => (
-          <KanbanCard key={card.id} card={card} status={column.id} onCardSelect={onCardSelect} />
+          <KanbanCard key={card.id} card={card} status={column.id} onCardSelect={onCardSelect} members={members} />
         ))}
         {isOver && column.cards.length === 0 && (
           <div className={`h-24 rounded-lg border-2 border-dashed flex items-center justify-center text-neutral-600 transition-colors ${column.color.replace('bg-', 'border-').replace('-400', '-500/30')}`}>Drop here</div>

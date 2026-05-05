@@ -7,7 +7,8 @@ import { Column } from '../types';
 interface EditColumnModalProps {
   column: Column;
   onClose: () => void;
-  onSave: (updatedColumn: Column) => void;
+  onSave: (updatedColumn: Column) => void | Promise<void>;
+  onDelete: (columnId: string) => void | Promise<void>;
 }
 
 const COLORS = [
@@ -21,11 +22,13 @@ const COLORS = [
   { label: 'Pink', value: 'bg-pink-400' },
 ];
 
-const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSave }) => {
+const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSave, onDelete }) => {
   const [title, setTitle] = useState(column.title);
   const [keyword, setKeyword] = useState(column.keyword);
   const [selectedColor, setSelectedColor] = useState(column.color);
   const [isDoneColumn, setIsDoneColumn] = useState(column.isDoneColumn || false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const handleSave = () => {
     if (title.trim()) {
@@ -40,8 +43,23 @@ const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSa
     }
   };
 
+  const handleDelete = () => {
+    setIsDeleteConfirmOpen(true);
+  };
+
   const handleModalContentClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDelete(column.id);
+      onClose();
+    } catch (error) {
+      console.error("Error borrando la columna", error);
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -53,7 +71,7 @@ const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSa
       aria-labelledby="edit-column-title"
     >
       <div
-        className="bg-white dark:bg-[#1c1c1f] border border-neutral-200 dark:border-neutral-800 rounded-lg w-full max-w-sm flex flex-col animate-scale-in"
+        className="relative overflow-hidden bg-white dark:bg-[#1c1c1f] border border-neutral-200 dark:border-neutral-800 rounded-lg w-full max-w-sm flex flex-col animate-scale-in"
         onClick={handleModalContentClick}
       >
         <header className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-800">
@@ -136,22 +154,67 @@ const EditColumnModal: React.FC<EditColumnModalProps> = ({ column, onClose, onSa
           </div>
 
           {/* Footer Actions */}
-          <div className="flex justify-end gap-3 mt-6">
+          <div className="flex items-center justify-between gap-3 mt-6">
             <button
-              onClick={onClose}
-              className="px-4 py-2 bg-white dark:bg-[#27272a] border border-neutral-300 dark:border-neutral-700 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-red-600/10 border border-red-500/40 rounded-md hover:bg-red-600/20 text-red-500 dark:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Cancel
+              {isDeleting ? 'Borrando...' : 'Borrar Columna'}
             </button>
-            <button
-              onClick={handleSave}
-              disabled={!title.trim()}
-              className="px-4 py-2 bg-blue-600 border border-blue-500 rounded-md hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Save
-            </button>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={onClose}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-white dark:bg-[#27272a] border border-neutral-300 dark:border-neutral-700 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!title.trim() || isDeleting}
+                className="px-4 py-2 bg-blue-600 border border-blue-500 rounded-md hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
+        {isDeleteConfirmOpen && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
+            <div className="w-full rounded-lg border border-red-500/30 bg-white p-5 shadow-2xl dark:bg-[#202023]">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+                  <i className="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                    Borrar columna
+                  </h2>
+                  <p className="mt-1 text-sm leading-5 text-neutral-600 dark:text-neutral-400">
+                    Se eliminará <span className="font-semibold text-neutral-900 dark:text-neutral-100">"{column.title}"</span> junto con todas sus tarjetas. Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  onClick={() => setIsDeleteConfirmOpen(false)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-md border border-neutral-300 bg-white text-sm text-neutral-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-[#27272a] dark:text-neutral-200 dark:hover:bg-neutral-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-md border border-red-500 bg-red-600 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isDeleting ? 'Borrando...' : 'Sí, borrar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

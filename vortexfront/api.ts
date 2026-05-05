@@ -1,9 +1,46 @@
-import { Space, Column, Card, ChangeLogEntry, Tag, AppNotification } from './types'; 
+import { Space, Column, ChangeLogEntry, Tag, AppNotification } from './types'; 
 
 const API_BASE_URL = "http://localhost:8080/api";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const defaultConfig = {
     credentials: "include" as RequestCredentials
+};
+
+type GithubRepo = Record<string, unknown>;
+type ApiHistoryLog = {
+    id?: string;
+    type: ChangeLogEntry['type'];
+    description: string;
+    details?: string;
+    cardId?: string;
+    timestamp?: string;
+    userName?: string;
+    userAvatar?: string;
+};
+type NewHistoryLog = {
+    type: ChangeLogEntry['type'];
+    description: string;
+    details: string;
+    cardId?: string;
+    user: {
+        name: string;
+        avatar: string;
+    };
+};
+
+const readErrorMessage = async (response: Response, fallback: string) => {
+    try {
+        const payload = await response.json();
+        return payload?.message || payload?.error || fallback;
+    } catch {
+        try {
+            const text = await response.text();
+            return text || fallback;
+        } catch {
+            return fallback;
+        }
+    }
 };
 
 export const vortexApi = {
@@ -66,7 +103,7 @@ export const vortexApi = {
 
     getEventsStreamUrl: () => `${API_BASE_URL}/events/stream`,
 
-    getGithubRealRepos: async (): Promise<any[]> => {
+    getGithubRealRepos: async (): Promise<GithubRepo[]> => {
         const rRep = await fetch(`${API_BASE_URL}/auth/repos`, defaultConfig);
         if(!rRep.ok) return[]; 
         return rRep.json();
@@ -140,6 +177,15 @@ export const vortexApi = {
         return correctResponse.json();
     },
 
+    deleteColumn: async (columnId: string) => {
+        const response = await fetch(`${API_BASE_URL}/columns/${columnId}`, {
+            ...defaultConfig,
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error(await readErrorMessage(response, "Error borrando la columna"));
+        return true;
+    },
+
     reorderColumns: async (workspaceId: string, orderedColumnIds: string[]) => {
         const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/columns/reorder`, {
             ...defaultConfig,
@@ -186,11 +232,11 @@ export const vortexApi = {
                 title, 
                 description,
                 dueDate: dueDate || null,
-                assignees: assignees || [],
+                assignees: (assignees || []).filter(assignee => UUID_PATTERN.test(assignee)),
                 tags: tags ||[]
             })
         });
-        if (!response.ok) throw new Error("Error actualizando la tarjeta");
+        if (!response.ok) throw new Error(await readErrorMessage(response, "Error actualizando la tarjeta"));
         return response.json();
     },
 
@@ -216,7 +262,7 @@ export const vortexApi = {
         if (!response.ok) return[];
         const data = await response.json();
         
-        return data.map((log: any) => ({
+        return data.map((log: ApiHistoryLog) => ({
             id: log.id,
             type: log.type,
             description: log.description,
@@ -230,7 +276,7 @@ export const vortexApi = {
         }));
     },
 
-    addHistoryLog: async (workspaceId: string, logData: any) => {
+    addHistoryLog: async (workspaceId: string, logData: NewHistoryLog) => {
         const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}/history`, {
             ...defaultConfig,
             method: 'POST',

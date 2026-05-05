@@ -2,7 +2,7 @@
 
 
 import React, { useState } from 'react';
-import { Card } from '../types';
+import { Card, WorkspaceMember } from '../types';
 import Avatar from './Avatar';
 import TagPill from './TagPill';
 
@@ -10,6 +10,7 @@ interface KanbanCardProps {
   card: Card;
   status: string;
   onCardSelect: (card: Card) => void;
+  members?: WorkspaceMember[];
 }
 
 const statusHoverBorderConfig: { [key: string]: string } = {
@@ -20,7 +21,7 @@ const statusHoverBorderConfig: { [key: string]: string } = {
 };
 
 
-const KanbanCard: React.FC<KanbanCardProps> = ({ card, status, onCardSelect }) => {
+const KanbanCard: React.FC<KanbanCardProps> = ({ card, status, onCardSelect, members = [] }) => {
     const [isDragging, setIsDragging] = useState(false);
 
     // Fallback for dynamic columns if specific color isn't mapped
@@ -37,6 +38,22 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ card, status, onCardSelect }) =
       setIsDragging(false);
     };
 
+    const resolveAssignee = (assigneeId: string) => {
+      const member = members.find(item => item.id === assigneeId);
+      if (member) {
+        const name = member.name || member.username || member.email || 'Assignee';
+        return {
+          avatar: member.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff`,
+          name
+        };
+      }
+
+      return {
+        avatar: assigneeId.startsWith('http') ? assigneeId : `https://ui-avatars.com/api/?name=${encodeURIComponent('Assignee')}&background=0D8ABC&color=fff`,
+        name: 'Assignee'
+      };
+    };
+
   return (
     <div 
         draggable
@@ -51,9 +68,10 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ card, status, onCardSelect }) =
         </div>
         {card.assignees && (
           <div className="flex -space-x-2">
-            {card.assignees.map((assignee, index) => (
-              <Avatar key={index} src={assignee} alt={`Assignee ${index + 1}`} />
-            ))}
+            {card.assignees.map((assignee, index) => {
+              const resolvedAssignee = resolveAssignee(assignee);
+              return <Avatar key={index} src={resolvedAssignee.avatar} alt={resolvedAssignee.name} />;
+            })}
           </div>
         )}
       </div>

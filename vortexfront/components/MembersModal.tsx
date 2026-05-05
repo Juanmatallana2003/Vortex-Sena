@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Space } from '../types';
 import { vortexApi } from '../api';
+import { DEFAULT_AVATAR_SRC, handleAvatarError } from './Avatar';
 
 interface MembersModalProps {
   space: Space;
@@ -11,13 +12,26 @@ interface MembersModalProps {
   onMemberAdded: (updatedSpace: Space) => void; 
 }
 
+interface GithubUserPreview {
+  login: string;
+  avatar_url: string;
+}
+
 const MembersModal: React.FC<MembersModalProps> = ({ space, onClose, onMemberAdded }) => {
   const[searchTerm, setSearchTerm] = useState('');
   const [isInviting, setIsInviting] = useState(false);
   const[inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
-  const [isEmailInput, setIsEmailInput] = useState(false);
-  const [githubUserPreview, setGithubUserPreview] = useState<any | null>(null);
+  const normalizedSearchTerm = searchTerm.trim();
+  const isEmailInput = searchTerm.includes('@') && searchTerm.includes('.');
+  const githubUserPreview = useMemo<GithubUserPreview | null>(() => {
+      if (isEmailInput || normalizedSearchTerm.length <= 2) return null;
+
+      return {
+          login: normalizedSearchTerm,
+          avatar_url: `https://github.com/${normalizedSearchTerm}.png`
+      };
+  }, [isEmailInput, normalizedSearchTerm]);
 
   // La lista de miembros vivos ahora viene directamente de PostgreSQL a través del prop 'space'
   const activeMembers = space.members ||[];
@@ -25,22 +39,6 @@ const MembersModal: React.FC<MembersModalProps> = ({ space, onClose, onMemberAdd
   const handleModalContentClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
-
-  useEffect(() => {
-      if (searchTerm.includes('@') && searchTerm.includes('.')) {
-          setIsEmailInput(true);
-          setGithubUserPreview(null);
-      } else if (searchTerm.trim().length > 2) {
-          setIsEmailInput(false);
-          setGithubUserPreview({
-              login: searchTerm.trim(),
-              avatar_url: `https://github.com/${searchTerm.trim()}.png` 
-          });
-      } else {
-          setIsEmailInput(false);
-          setGithubUserPreview(null);
-      }
-  }, [searchTerm]);
 
   const executeInvitation = async (inputData: string, type: 'email' | 'github', avatarData: string) => {
       setIsInviting(true);
@@ -120,8 +118,8 @@ const MembersModal: React.FC<MembersModalProps> = ({ space, onClose, onMemberAdd
               {githubUserPreview && !isEmailInput && (
                    <div className="flex items-center justify-between bg-neutral-100 dark:bg-[#1f1f22] border border-neutral-200 dark:border-neutral-700/50 p-2 rounded-lg animate-fade-in">
                       <div className="flex items-center gap-3">
-                          <img src={githubUserPreview.avatar_url} alt="Git" className="w-8 h-8 rounded-full border border-neutral-600 object-cover" 
-                               onError={(e) => { e.currentTarget.src = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" }}/>
+                          <img src={githubUserPreview.avatar_url || DEFAULT_AVATAR_SRC} alt="Git" className="w-8 h-8 rounded-full border border-neutral-600 object-cover" 
+                               onError={handleAvatarError}/>
                           <div className="flex flex-col">
                               <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200">@{githubUserPreview.login}</span>
                               <span className="text-[9px] uppercase tracking-widest text-neutral-500">Cuenta Github</span>
@@ -149,9 +147,9 @@ const MembersModal: React.FC<MembersModalProps> = ({ space, onClose, onMemberAdd
                  activeMembers.map((member, index) => (
                     <div key={index} className="flex items-center gap-3 bg-gray-50 dark:bg-[#121213] p-2.5 rounded-xl border border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 transition-all">
                         <img 
-                           src={member.avatarUrl} 
+                           src={member.avatarUrl || DEFAULT_AVATAR_SRC} 
                            alt={member.name} 
-                           onError={(e) => { e.currentTarget.src = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" }}
+                           onError={handleAvatarError}
                            className="w-9 h-9 rounded-full border border-neutral-300 dark:border-neutral-600 object-cover bg-white" 
                         />
                         <div className="flex flex-col w-full">

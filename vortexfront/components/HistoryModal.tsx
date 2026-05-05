@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { ChangeLogEntry } from '../types';
+import { DEFAULT_AVATAR_SRC, handleAvatarError } from './Avatar';
 
 interface HistoryModalProps {
   onClose: () => void;
@@ -90,10 +91,10 @@ const HistoryModal: React.FC<HistoryModalProps> = ({ onClose, history, onOpenCar
                     {/* El Nodo / Punto de la línea de tiempo */}
                     <div className="absolute -left-[22px] sm:-left-[31px] top-1">
                         <img 
-                            src={log.user.avatar} 
+                            src={log.user.avatar || DEFAULT_AVATAR_SRC} 
                             alt={log.user.name} 
                             className="w-10 h-10 rounded-full border-[3px] border-white dark:border-[#121214] object-cover shadow-sm group-hover:scale-110 transition-transform duration-300 z-10 relative" 
-                            onError={(e) => { e.currentTarget.src = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" }}
+                            onError={handleAvatarError}
                         />
                     </div>
 

@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Tag } from '../types';
+import { Card, Tag, WorkspaceMember } from '../types';
 import Avatar from './Avatar';
 import TagPill from './TagPill';
-import { ALL_TAGS, ALL_USERS } from '../constants';
+import { ALL_TAGS } from '../constants';
 
 // ✨ ¡Inyectamos directo Al Archivo Oficial la Central Api aquí!! 
 import { vortexApi } from '@/api';
@@ -15,13 +15,16 @@ interface CardDetailModalProps {
   onClose: () => void;
   onUpdate: (updatedCard: Card) => void;
   onDelete: (cardId: string) => void;
+  members?: WorkspaceMember[];
 }
 
-const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpdate, onDelete }) => {
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpdate, onDelete, members = [] }) => {
 
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description || '');
-  const [assignees, setAssignees] = useState<string[]>(card.assignees ||[]);
+  const [assignees, setAssignees] = useState<string[]>((card.assignees ||[]).filter(assignee => UUID_PATTERN.test(assignee)));
   const [tags, setTags] = useState<Tag[]>(card.tags || []);
   const[dueDate, setDueDate] = useState(card.dueDate || '');
 
@@ -47,6 +50,16 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
   },[]);
 
   const handleModalContentClick = (e: React.MouseEvent) => { e.stopPropagation(); };
+  const resolveMember = (memberId: string) => members.find(member => member.id === memberId);
+  const resolveMemberName = (memberId: string) => {
+      const member = resolveMember(memberId);
+      return member?.name || member?.username || member?.email || 'Assignee';
+  };
+  const resolveMemberAvatar = (memberId: string) => {
+      const member = resolveMember(memberId);
+      const displayName = resolveMemberName(memberId);
+      return member?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0D8ABC&color=fff`;
+  };
 
   const handleSave = () => {
       const updatedCard: Card = {
@@ -80,7 +93,7 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
 
 
   // Toggle helpers
-  const toggleAssignee = (avatarUrl: string) => { setAssignees(prev => prev.includes(avatarUrl) ? prev.filter(a => a !== avatarUrl) : [...prev, avatarUrl] ); };
+  const toggleAssignee = (memberId: string) => { setAssignees(prev => prev.includes(memberId) ? prev.filter(a => a !== memberId) : [...prev, memberId] ); };
   const toggleTag = (tag: Tag) => { setTags(prev => { const exists = prev.some(t => t.label === tag.label); if (exists) return prev.filter(t => t.label !== tag.label); return [...prev, tag]; }); };
 
   return (
@@ -141,7 +154,7 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
                     <div className="flex flex-wrap gap-2 min-h-[32px]">
                         {assignees.map((assignee, index) => (
                              <div key={index} className="relative group">
-                                <Avatar src={assignee} alt="Assignee" />
+                                <Avatar src={resolveMemberAvatar(assignee)} alt={resolveMemberName(assignee)} />
                                 <button onClick={() => toggleAssignee(assignee)} className="absolute -top-2 -right-2 w-5 h-5 bg-white dark:bg-neutral-800 rounded-full text-xs text-neutral-400 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400 hover:scale-125 transition-all border border-neutral-200 dark:border-neutral-600 shadow-sm"><i className="fa-solid fa-times"></i></button>
                              </div>
                         ))}
@@ -151,7 +164,9 @@ const CardDetailModal: React.FC<CardDetailModalProps> = ({ card, onClose, onUpda
                         <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#1c1c1f] border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl z-20 animate-scale-in overflow-hidden">
                             <div className="p-2 border-b border-neutral-200 dark:border-neutral-800 text-xs font-medium text-neutral-500 dark:text-neutral-400">Puestos / Cargos Dev</div>
                             <div className="max-h-48 overflow-y-auto p-1">
-                                {ALL_USERS.map((user) => { const isSelected = assignees.includes(user.avatar); return (<button key={user.name} onClick={() => toggleAssignee(user.avatar)} className="flex items-center gap-2 w-full p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-md transition-colors text-left"><Avatar src={user.avatar} alt={user.name} /><span className={`text-sm flex-1 ${isSelected ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-neutral-700 dark:text-neutral-300'}`}>{user.name}</span>{isSelected && <i className="fa-solid fa-check text-blue-600 dark:text-blue-400 text-xs"></i>}</button>);})}
+                                {members.length > 0 ? members.map((member) => { const label = member.name || member.username || member.email || 'Miembro'; const isSelected = assignees.includes(member.id); return (<button key={member.id} onClick={() => toggleAssignee(member.id)} className="flex items-center gap-2 w-full p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-md transition-colors text-left"><Avatar src={resolveMemberAvatar(member.id)} alt={label} /><span className={`text-sm flex-1 ${isSelected ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-neutral-700 dark:text-neutral-300'}`}>{label}</span>{isSelected && <i className="fa-solid fa-check text-blue-600 dark:text-blue-400 text-xs"></i>}</button>);}) : (
+                                  <div className="p-3 text-xs text-neutral-500 dark:text-neutral-400">Agrega miembros reales al espacio antes de asignar tareas.</div>
+                                )}
                             </div>
                         </div>
                     )}

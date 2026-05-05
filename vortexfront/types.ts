@@ -22,6 +22,14 @@ export interface Card {
   description?: string;
 }
 
+export interface WorkspaceMember {
+  id: string;
+  name?: string;
+  username?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
 export interface Column {
   id: string; 
   title: string;
@@ -38,7 +46,7 @@ export interface Space {
   repoUrl?: string;
   defaultBranch?: string;
   columns?: Column[];
-  members?: any[];
+  members?: WorkspaceMember[];
 }
 
 export interface FilterState {
